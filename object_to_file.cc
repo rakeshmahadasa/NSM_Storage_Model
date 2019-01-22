@@ -137,11 +137,11 @@ bool Table::CreateTable(const char* filename){
 		cerr<<"Table creation Failed. Unable to open file"<<endl;
 		exit(2);
 	}
-    dirpagecount++;
     DirPage* first_dir_page = new DirPage();
     fseek(table,0,SEEK_SET);
     fwrite(first_dir_page,sizeof(DirPage),1,table);
     fsync(fileno(table));
+    dirpagecount++;
     return true;
 }
 
@@ -169,27 +169,26 @@ void Table::ReadPage(DirPage* page_buffer,int32_t offset){
     fseek(table,offset,SEEK_SET);
     fread(page_buffer,sizeof(DirPage),1,table);
 }
-
+int get_eof_offset(){
+    return (dirpagecount*sizeof(DirPage) + datapagecount*sizeof(DataPage));
+}
 bool Table::Insert(string record){
     if(latest_data_offset == -1){
-        datapagecount++;
         DirPage* first_dir_page = new DirPage();
         ReadPage(first_dir_page,latest_dir_offset);
-        first_dir_page->Insert(lseek(fileno(table),0,SEEK_END));
+        first_dir_page->Insert(get_eof_offset());
         DataPage P;
         P.Insert(record);
-        fseek(table,0,SEEK_END);
         InsertPage(first_dir_page,table,0);        
-        latest_data_offset=lseek(fileno(table),0,SEEK_END);
-        fseek(table,0,SEEK_END);
+        latest_data_offset=get_eof_offset();
         InsertPage(&P,table,latest_data_offset);
+        datapagecount++;
         return true;
     }
     else{
         DataPage* old_data_page = new DataPage();
         ReadPage(old_data_page,latest_data_offset);
         if(old_data_page->Insert(record)){
-            fseek(table,0,SEEK_END);
             InsertPage(old_data_page,table,latest_data_offset);
             return true;
         }
@@ -198,27 +197,25 @@ bool Table::Insert(string record){
             DataPage* new_data_page = new DataPage();
             DirPage* old_dir_page = new DirPage();
             ReadPage(old_dir_page,latest_dir_offset);
-            if(!old_dir_page->Insert(lseek(fileno(table),0,SEEK_END))){
-                dirpagecount++;
-                old_dir_page->header.next=lseek(fileno(table),0,SEEK_END);
-                fseek(table,0,SEEK_END);
+            if(!old_dir_page->Insert(get_eof_offset())){
+                old_dir_page->header.next=get_eof_offset();
                 InsertPage(old_dir_page,table,latest_dir_offset);
                 DirPage* new_dir_page = new DirPage();
-                new_dir_page->Insert(lseek(fileno(table),0,SEEK_END)+sizeof(DirPage));
-                fseek(table,0,SEEK_END);
-                InsertPage(new_dir_page,table,lseek(fileno(table),0,SEEK_END));
+                new_dir_page->Insert(get_eof_offset()+sizeof(DirPage));
+                InsertPage(new_dir_page,table,get_eof_offset());
+                dirpagecount++;
                 latest_dir_offset=old_dir_page->header.next;
             }
-            datapagecount++;
-            fseek(table,0,SEEK_END);
-            InsertPage(old_dir_page,table,latest_dir_offset);
+            else{
+                InsertPage(old_dir_page,table,latest_dir_offset);
+            }
+
             new_data_page->Insert(record);
-            old_data_page->header.next = lseek(fileno(table),0,SEEK_END);
-            fseek(table,0,SEEK_END);
+            old_data_page->header.next = get_eof_offset();
             InsertPage(old_data_page,table,latest_data_offset);
-            fseek(table,0,SEEK_END);
             InsertPage(new_data_page,table,old_data_page->header.next);
             latest_data_offset=old_data_page->header.next;
+            datapagecount++;
             return true;
         }
     }
@@ -227,14 +224,22 @@ bool Table::Insert(string record){
 
 void Table::ReadTable(){
     fseek(table,0,SEEK_SET);
-    DirPage* current_dir_page = new DirPage();
-    fread(current_dir_page,sizeof(DirPage),1,table);
-    current_dir_page->print_page_info();
-    DataPage* current_page = new DataPage();
+    int current_dir_offset=0;
     while(true){
-        fread(current_page,sizeof(DataPage),1,table);
-        current_page->print_page_info();
-        if(current_page->header.next==-1){
+        DirPage* current_dir_page = new DirPage();
+        ReadPage(current_dir_page,current_dir_offset);
+        cout<<"====================DIR==============="<<endl;
+        current_dir_page->print_page_info();
+        cout<<"======================================"<<endl;
+        for(int i = 0; i < current_dir_page->header.offset_count;i++){
+            int current_data_offset = current_dir_page->data_offsets[i];
+            DataPage* current_data_page = new DataPage();
+            ReadPage(current_data_page,current_data_offset);
+            current_data_page->print_page_info();
+        }
+        current_dir_offset = current_dir_page->header.next;
+        if(current_dir_offset == -1){
+            cout<<"End of Reading DB"<<endl;
             break;
         }
     }
@@ -244,132 +249,14 @@ int main()
 {
     Table db;
     db.CreateTable("init.bin");
-
-    // for(int i = 0; i<10;i++){
-    //     DataPage P;
-    //     for(int j = 0; j < slots_per_page;j++){
-    //         P.Insert("Rakesh"+to_string(i));
-    //     }
-    //     fseek(db.table,0,SEEK_END);
-    //     db.InsertPage(&P,db.table,lseek(fileno(db.table),0,SEEK_END));
-    // }
-
-    for (int i = 0; i < slots_per_page; i++)
-    {
-        string name = "RakeshM";
-        if (!db.Insert(name))
+    for(int j = 0; j < 1000000;j++){
+        if (!db.Insert(to_string(j / slots_per_page)))
         {
-            cout << "Error writing record to page" << endl;
-            exit(2);
-        }
-    }
-    fseek(db.table,0,SEEK_SET);
-    DirPage* current_dir_page = new DirPage();
-    fread(current_dir_page,sizeof(DirPage),1,db.table);
-    current_dir_page->print_page_info();
-    for (int i = 0; i < slots_per_page; i++)
-    {   
-        string name="Keerthi";
-        if (!db.Insert(name))
-        {
-            cout << "Error writing record to page" << endl;
-            exit(2);
+            cout << "Error writing to page. slots full" << endl;
+            exit(1);
         }
     }
 
-    fseek(db.table,0,SEEK_SET);
-    fread(current_dir_page,sizeof(DirPage),1,db.table);
-    current_dir_page->print_page_info();
-    
-    for (int i = 0; i < slots_per_page; i++)
-    {   
-        string name="Madhuli";
-        if (!db.Insert(name))
-        {
-            cout << "Error writing record to page" << endl;
-            exit(2);
-        }
-    }
-    fseek(db.table,0,SEEK_SET);
-    fread(current_dir_page,sizeof(DirPage),1,db.table);
-    current_dir_page->print_page_info();
-
-    for (int i = 0; i < slots_per_page; i++)
-    {   
-        string name="SushmaM";
-        if (!db.Insert(name))
-        {
-            cout << "Error writing record to page" << endl;
-            exit(2);
-        }
-    }
-    fseek(db.table,0,SEEK_SET);
-    fread(current_dir_page,sizeof(DirPage),1,db.table);
-    current_dir_page->print_page_info();
-
-    // for (int i = 0; i < slots_per_page; i++)
-    // {   
-    //     string name="PrasadM";
-    //     if (!db.Insert(name))
-    //     {
-    //         cout << "Error writing record to page" << endl;
-    //         exit(2);
-    //     }
-    // }
-    //     fseek(db.table,0,SEEK_SET);
-    // fread(current_dir_page,sizeof(DirPage),1,db.table);
-    // current_dir_page->print_page_info();
-
-    // for (int i = 0; i < slots_per_page; i++)
-    // {   
-    //     string name="GangaMa";
-    //     if (!db.Insert(name))
-    //     {
-    //         cout << "Error writing record to page" << endl;
-    //         exit(2);
-    //     }
-    // }
-    // fseek(db.table,0,SEEK_SET);
-    // fread(current_dir_page,sizeof(DirPage),1,db.table);
-    // current_dir_page->print_page_info();
-
-    // for (int i = 0; i < slots_per_page; i++)
-    // {   
-    //     string name="Suhasin";
-    //     if (!db.Insert(name))
-    //     {
-    //         cout << "Error writing record to page" << endl;
-    //         exit(2);
-    //     }
-    // }
-    // fseek(db.table,0,SEEK_SET);
-    // fread(current_dir_page,sizeof(DirPage),1,db.table);
-    // current_dir_page->print_page_info();
-
-    //     for (int i = 0; i < slots_per_page; i++)
-    // {   
-    //     string name="Mangesh";
-    //     if (!db.Insert(name))
-    //     {
-    //         cout << "Error writing record to page" << endl;
-    //         exit(2);
-    //     }
-    // }
-    // fseek(db.table,0,SEEK_SET);
-    // fread(current_dir_page,sizeof(DirPage),1,db.table);
-    // current_dir_page->print_page_info();
-
-    //db.ReadTable();
-    // fseek(db.table,0,SEEK_SET);
-    // fread(current_dir_page,sizeof(DirPage),1,db.table);
-    // current_dir_page->print_page_info();
-    // DataPage* current_page = new DataPage();
-    // while(true){
-    //     fread(current_page,sizeof(DataPage),1,db.table);
-    //     current_page->print_page_info();
-    //     if(current_page->header.next==-1){
-    //         break;
-    //     }
-    // }
+    db.ReadTable();
     return 0;    
 }
