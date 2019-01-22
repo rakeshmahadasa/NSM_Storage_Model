@@ -6,7 +6,7 @@
 
 using namespace std;
 
-const uint32_t pagesize=1024;
+const uint32_t pagesize=4096;
 const uint32_t recordsize=8;
 uint32_t datapagecount=0;
 uint32_t dirpagecount=0;
@@ -269,7 +269,6 @@ bool Table::Read(uint64_t RID,char* buff){
             uint32_t current_data_offset = current_dir_page->data_offsets[i];
             DataPage* current_data_page = new DataPage();
             ReadPage(current_data_page,current_data_offset);
-            cout<<"Current PageID : "<<current_data_page->header.pageID<<endl;
             if(current_data_page->header.pageID == pageID){
                 if(current_data_page->Read(RID,buff)){
                     return true;
@@ -289,7 +288,7 @@ int main()
 {
     Table db;
     db.CreateTable("init.bin");
-    for(int j = 0; j < 50000;j++){
+    for(int j = 0; j < 1000000;j++){
         if (!db.Insert("RAK"+to_string(j / slots_per_page)))
         {
             cout << "Error writing to page. slots full" << endl;
@@ -300,7 +299,7 @@ int main()
     cout<<"Total Data Pages : "<<datapagecount<<endl;
     cout<<"Total Dir Pages : "<<dirpagecount<<endl;
     char* result = new char[recordsize];
-    uint32_t pageID = 50;
+    uint32_t pageID = 2000;
     uint32_t slotID = 15;
     uint64_t RID = (uint64_t)pageID<<32 | slotID;
     if(db.Read(RID,result)){
