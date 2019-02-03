@@ -3,6 +3,9 @@
 #include<cstring>
 #include<stdio.h>
 #include <unistd.h>
+#include <sys/stat.h> // open()
+#include <fcntl.h> // open flags
+
 
 using namespace std;
 
@@ -77,7 +80,6 @@ void DataPage::print_page_info(){
 
 bool DataPage::Read(uint64_t RID,char* buff){
     uint32_t slotID = (RID & 0xffffffff);
-    cout<<"slot ID : "<<slotID<<endl;
     if(slotID > header.record_count) return false;
     strcpy(buff,records[slotID].record_data);
     return true;
@@ -124,9 +126,12 @@ class Table{
         FILE* table;
         int32_t latest_dir_offset;
         int32_t latest_data_offset;
+        DirPage* current_dir_page;
+        DataPage* current_data_page;
         Table();
         bool CreateTable(const char* filename);
         bool Insert(string record);
+        bool LazyInsert(string record);
         bool InsertPage(DataPage* P, FILE* table,int32_t offset);
         bool InsertPage(DirPage* P, FILE* table,int32_t offset);
         void ReadTable();
@@ -139,6 +144,8 @@ class Table{
 Table::Table(){
     latest_dir_offset=0;
     latest_data_offset=-1;
+    current_dir_page = new DirPage;
+    current_data_page = new DataPage;
 }
 
 bool Table::CreateTable(const char* filename){
@@ -230,6 +237,53 @@ bool Table::Insert(string record){
     return false;
 }
 
+bool Table::LazyInsert(string record){
+    if(latest_data_offset == -1){
+        
+        InsertPage(current_dir_page,table,0);        
+        current_dir_page->Insert(get_eof_offset());
+        current_data_page->Insert(record);
+        latest_data_offset=get_eof_offset();
+        InsertPage(current_data_page,table,latest_data_offset);
+        //fflush(table);
+        datapagecount++;
+        return true;
+
+    }
+    else{
+        if(current_data_page->Insert(record)){
+            return true;
+        }
+        else{
+
+            if(!current_dir_page->Insert(get_eof_offset())){
+
+                current_dir_page->header.next=get_eof_offset();
+                InsertPage(current_dir_page,table,latest_dir_offset);
+                latest_dir_offset=current_dir_page->header.next;
+                delete current_dir_page;
+                current_dir_page = new DirPage;
+                current_dir_page->Insert(latest_dir_offset+sizeof(DirPage));
+                InsertPage(current_dir_page,table,latest_dir_offset);        
+                dirpagecount++;
+            }
+
+            current_data_page->header.next = get_eof_offset();
+            InsertPage(current_data_page, table, latest_data_offset);
+            latest_data_offset=current_data_page->header.next;
+            delete current_data_page;
+            current_data_page = new DataPage;
+            current_data_page->Insert(record);
+            InsertPage(current_data_page, table,latest_data_offset);
+            datapagecount++;
+            //fflush(table);
+            return true;
+        }
+    }
+    return false;
+}
+
+
 void Table::ReadTable(){
     fseek(table,0,SEEK_SET);
     int current_dir_offset=0;
@@ -258,9 +312,11 @@ void Table::CloseTable(){
 }
 
 bool Table::Read(uint64_t RID,char* buff){
+    
     uint32_t slotID = (RID & 0xffffffff);
     uint32_t pageID = (RID >> 32); 
     fseek(table,0,SEEK_SET);
+    cout<<"PageID : "<<pageID<<" Slot ID: "<<slotID<<endl;
     uint32_t current_dir_offset=0;
     while(true){
         DirPage* current_dir_page = new DirPage();
@@ -279,17 +335,27 @@ bool Table::Read(uint64_t RID,char* buff){
         }
         current_dir_offset = current_dir_page->header.next;
         if(current_dir_offset == -1){
-            cout<<"End of Reading DB"<<endl;
+
+            cout<<current_dir_page->header.pageID<<" End of Reading DB"<<endl;
             break;
         }
     }
 }
+
+uint64_t randomRIDgenerator(){
+
+    uint32_t random_pageID = rand()%datapagecount; 
+    uint32_t random_slotID = rand()%slots_per_page;
+    return((uint64_t)random_pageID<<32 | random_slotID);
+
+}
+
 int main()
 {
     Table db;
     db.CreateTable("init.bin");
-    for(int j = 0; j < 1000000;j++){
-        if (!db.Insert("RAK"+to_string(j / slots_per_page)))
+    for(int j = 0; j < 10000000;j++){
+        if (!db.LazyInsert(to_string(j / slots_per_page)))
         {
             cout << "Error writing to page. slots full" << endl;
             exit(1);
@@ -299,19 +365,21 @@ int main()
     cout<<"Total Data Pages : "<<datapagecount<<endl;
     cout<<"Total Dir Pages : "<<dirpagecount<<endl;
     char* result = new char[recordsize];
-    uint32_t pageID = 2000;
-    uint32_t slotID = 15;
-    uint64_t RID = (uint64_t)pageID<<32 | slotID;
-    if(db.Read(RID,result)){
-        for(int i = 0;i<recordsize;i++){
-            cout<<result[i];
+    for(int i = 0 ; i<1000;i++){
+        uint64_t RID = randomRIDgenerator();
+        if (db.Read(RID, result))
+        {
+            for (int i = 0; i < recordsize; i++)
+            {
+                cout << result[i];
+            }
+            cout << endl;
         }
-        cout<<endl;
+        else
+        {
+            cout << "NOT FOUND RECORD" << endl;
+        }
     }
-    else{
-        cout<<"NOT FOUND RECORD"<<endl;
-    }
-    
     db.CloseTable();
     return 0;    
 }
