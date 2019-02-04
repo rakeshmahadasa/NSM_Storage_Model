@@ -1,5 +1,5 @@
-g++ -c DataPage.cpp -o DataPage.o 
-g++ -c DirPage.cpp -o DirPage.o 
-g++ -c Table.cpp -o Table.o 
-g++ -c main.cc -o main.o 
-g++ DataPage.o DirPage.o Table.o main.o -o dbrun
+g++  -std=c++11 -c DataPage.cc -o DataPage.o 
+g++  -std=c++11 -c DirPage.cc -o DirPage.o 
+g++  -std=c++11 -c Table.cc -o Table.o 
+g++  -std=c++11 -c main.cc -o main.o 
+g++  -std=c++11 DataPage.o DirPage.o Table.o main.o -o dbrun
