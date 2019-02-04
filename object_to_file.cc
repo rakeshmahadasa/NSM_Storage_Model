@@ -5,12 +5,14 @@
 #include <unistd.h>
 #include <sys/stat.h> // open()
 #include <fcntl.h> // open flags
-
+#include <chrono>
+#include <cstdlib>
 
 using namespace std;
+using namespace chrono;
 
 const uint32_t pagesize=4096;
-const uint32_t recordsize=8;
+const uint32_t recordsize=256;
 uint32_t datapagecount=0;
 uint32_t dirpagecount=0;
 struct record{
@@ -80,7 +82,7 @@ void DataPage::print_page_info(){
 
 bool DataPage::Read(uint64_t RID,char* buff){
     uint32_t slotID = (RID & 0xffffffff);
-    if(slotID > header.record_count) return false;
+    if(slotID >= header.record_count) return false;
     strcpy(buff,records[slotID].record_data);
     return true;
 }
@@ -138,7 +140,8 @@ class Table{
         void ReadPage(DataPage* page_buffer,int32_t offset);
         void ReadPage(DirPage* page_buffer,int32_t offset);
         void CloseTable();
-        bool Read(uint64_t RID,char* buff);
+        bool SingleRead(uint64_t RID,char* buff);
+        bool SeqRead(uint64_t RID,char* buff,uint32_t scan_szie);
 };
 
 Table::Table(){
@@ -245,7 +248,7 @@ bool Table::LazyInsert(string record){
         current_data_page->Insert(record);
         latest_data_offset=get_eof_offset();
         InsertPage(current_data_page,table,latest_data_offset);
-        //fflush(table);
+        fflush(table);
         datapagecount++;
         return true;
 
@@ -276,7 +279,7 @@ bool Table::LazyInsert(string record){
             current_data_page->Insert(record);
             InsertPage(current_data_page, table,latest_data_offset);
             datapagecount++;
-            //fflush(table);
+            fflush(table);
             return true;
         }
     }
@@ -311,12 +314,12 @@ void Table::CloseTable(){
     fclose(table);
 }
 
-bool Table::Read(uint64_t RID,char* buff){
+bool Table::SingleRead(uint64_t RID,char* buff){
     
     uint32_t slotID = (RID & 0xffffffff);
     uint32_t pageID = (RID >> 32); 
     fseek(table,0,SEEK_SET);
-    cout<<"PageID : "<<pageID<<" Slot ID: "<<slotID<<endl;
+    //cout<<"PageID : "<<pageID<<" Slot ID: "<<slotID<<endl;
     uint32_t current_dir_offset=0;
     while(true){
         DirPage* current_dir_page = new DirPage();
@@ -327,6 +330,7 @@ bool Table::Read(uint64_t RID,char* buff){
             ReadPage(current_data_page,current_data_offset);
             if(current_data_page->header.pageID == pageID){
                 if(current_data_page->Read(RID,buff)){
+                    cout<<"Page ID Now : "<<current_data_page->header.pageID<<endl;
                     return true;
                 }
                 return false;
@@ -341,6 +345,54 @@ bool Table::Read(uint64_t RID,char* buff){
         }
     }
 }
+bool Table::SeqRead(uint64_t RID,char* buff,uint32_t scan_size){
+    
+    uint32_t slotID = (RID & 0xffffffff);
+    uint32_t pageID = (RID >> 32); 
+    fseek(table,0,SEEK_SET);
+    cout<<"PageID : "<<pageID<<" Slot ID: "<<slotID<<endl;
+    uint32_t current_dir_offset=0;
+    while(true){
+        DirPage* current_dir_page = new DirPage();
+        ReadPage(current_dir_page,current_dir_offset);
+        for(int i = 0; i < current_dir_page->header.offset_count;i++){
+            uint32_t current_data_offset = current_dir_page->data_offsets[i];
+            DataPage* current_data_page = new DataPage();
+            ReadPage(current_data_page,current_data_offset);
+            if(current_data_page->header.pageID == pageID){
+                
+                for(int i = 0; i < scan_size;i++){
+                    if(!current_data_page->Read(slotID , buff)){
+                        if(current_data_page->header.next == -1) return true;
+                        ReadPage(current_data_page,current_data_page->header.next);
+                        slotID=0;
+                        current_data_page->Read(slotID , buff);
+                        for (int i = 0; i < recordsize; i++)
+                        {
+                            cout << buff[i];
+                        }
+                        cout << endl;
+                    }
+                    else{
+                        for(int i = 0; i < recordsize;i++){
+                            cout<<buff[i];
+                        }
+                        cout<<endl;
+                    }
+                    slotID++;
+                }
+                return true;            
+            }
+        }
+        current_dir_offset = current_dir_page->header.next;
+        if(current_dir_offset == -1){
+
+            cout<<current_dir_page->header.pageID<<" End of Reading DB"<<endl;
+            break;
+        }
+    }
+}
+
 
 uint64_t randomRIDgenerator(){
 
@@ -349,37 +401,80 @@ uint64_t randomRIDgenerator(){
     return((uint64_t)random_pageID<<32 | random_slotID);
 
 }
-
-int main()
+int main(int argc, char const *argv[])
 {
+    if(argc < 5){
+        cerr<<"Insufficient Number of Arguments"<<endl;
+        cerr<<"correct command : ./a.out <pagesize | 1024 , 4096 , 16384 > <recordsize | 8 , 64 , 256> <type of read | r or s> <read length | 10 , 100 , 1000"<<endl;
+        cerr<<"Example Command : ./a.out 1024 64 r 10"<<endl;
+        exit(1);
+    }   
+
+    uint32_t pagesize_temp = atoi(argv[1]);
+    uint32_t recordsize_temp = atoi(argv[2]);
+    char reader_type = *argv[3];
+    uint32_t scan_size = atoi(argv[4]);
+
     Table db;
     db.CreateTable("init.bin");
-    for(int j = 0; j < 10000000;j++){
-        if (!db.LazyInsert(to_string(j / slots_per_page)))
+    high_resolution_clock::time_point insert_start_time = high_resolution_clock::now();
+    for(int j = 0; j < 20000;j++){
+        if (!db.LazyInsert(to_string(j)))
         {
             cout << "Error writing to page. slots full" << endl;
             exit(1);
         }
     }
+    db.InsertPage(db.current_dir_page,db.table,db.latest_dir_offset);
+    db.InsertPage(db.current_data_page,db.table,db.latest_data_offset);
+    high_resolution_clock::time_point insert_end_time = high_resolution_clock::now();
     cout<<"Inserting Data Completed"<<endl;
     cout<<"Total Data Pages : "<<datapagecount<<endl;
     cout<<"Total Dir Pages : "<<dirpagecount<<endl;
-    char* result = new char[recordsize];
-    for(int i = 0 ; i<1000;i++){
-        uint64_t RID = randomRIDgenerator();
-        if (db.Read(RID, result))
+    cout<<"Total slots per data page : "<<slots_per_page<<endl;
+    cout<<"Total slots per dir page : "<<offsets_per_dir<<endl;
+    cout<<"Insert time taken : "<<duration_cast<microseconds>(insert_end_time - insert_start_time).count()/1000000.0<<endl;
+
+    if( reader_type == 'r'){
+        cout<<"Starting Random Read"<<endl;
+        char *result = new char[recordsize];
+        high_resolution_clock::time_point random_read_start_time = high_resolution_clock::now();
+        for (int i = 0; i < scan_size; i++)
         {
-            for (int i = 0; i < recordsize; i++)
+            uint64_t RID = randomRIDgenerator();
+            if (db.SingleRead(RID, result))
             {
-                cout << result[i];
+                for (int i = 0; i < recordsize; i++)
+                {
+                    cout << result[i];
+                }
+                cout << endl;
             }
-            cout << endl;
+            else
+            {
+                cout << "NOT FOUND RECORD : RID : " <<RID<< endl;
+            }
         }
-        else
-        {
-            cout << "NOT FOUND RECORD" << endl;
-        }
+        high_resolution_clock::time_point random_read_end_time = high_resolution_clock::now();
+        cout<<"Random Read Completed"<<endl;
+        cout<<"Random Read Scan Size : "<<scan_size<<endl;
+        cout<<"Random Read time taken : "<<duration_cast<microseconds>(random_read_end_time - random_read_start_time).count()/1000000.0<<endl;
     }
+
+    else{
+        cout<<"Starting Sequential Read"<<endl;
+        char *result = new char[recordsize];
+        high_resolution_clock::time_point sequential_read_start_time = high_resolution_clock::now();
+        uint64_t RID = randomRIDgenerator();
+        db.SeqRead(RID, result,scan_size);
+        high_resolution_clock::time_point sequential_read_end_time = high_resolution_clock::now();
+        cout<<"Sequential Read Completed"<<endl;
+        cout<<"Sequential Read Scan Size : "<<scan_size<<endl;
+        cout<<"Sequential Read time taken : "<<duration_cast<microseconds>(sequential_read_end_time - sequential_read_start_time).count()/1000000.0<<endl;
+        
+    }
+
+
     db.CloseTable();
     return 0;    
 }
