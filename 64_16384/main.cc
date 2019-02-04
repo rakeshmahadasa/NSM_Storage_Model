@@ -72,10 +72,11 @@ int main(int argc, char const *argv[])
     uint32_t recordsize_temp = atoi(argv[2]);
     char reader_type = *argv[3];
     uint32_t scan_size = atoi(argv[4]);
+    uint32_t record_count = atoi(argv[5]);
     Table db;
     db.CreateTable("init.bin");
     high_resolution_clock::time_point insert_start_time = high_resolution_clock::now();
-    Insert(db,100000);
+    Insert(db,record_count);
     cout<<"Inserting Data Completed"<<endl;
     cout<<"Total Data Pages : "<<datapagecount<<endl;
     cout<<"Total Dir Pages : "<<dirpagecount<<endl;
