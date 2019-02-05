@@ -23,11 +23,12 @@ else
 fi 
 
 dir=${record_size}_${page_size}
-cd $dir
 echo $dir
+cd $dir
 g++  -std=c++11 -c DataPage.cc -o DataPage.o 
 g++  -std=c++11 -c DirPage.cc -o DirPage.o 
 g++  -std=c++11 -c Table.cc -o Table.o 
 g++  -std=c++11 -c main.cc -o main.o 
 g++  -std=c++11 DataPage.o DirPage.o Table.o main.o -o dbrun
 ./dbrun $page_size $record_size $read_mode $scan_size $record_count
+cd ..

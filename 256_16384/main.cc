@@ -56,6 +56,7 @@ bool Insert(Table db,uint32_t record_count){
     }
     db.InsertPage(db.current_dir_page, db.table, db.latest_dir_offset);
     db.InsertPage(db.current_data_page,db.table,db.latest_data_offset);
+    fflush(db.table);
     return true;
 }
 
@@ -84,28 +85,30 @@ int main(int argc, char const *argv[])
     cout<<"Total slots per dir page : "<<offsets_per_dir<<endl;
     high_resolution_clock::time_point insert_end_time = high_resolution_clock::now();
     cout<<"Insert time taken : "<<duration_cast<microseconds>(insert_end_time - insert_start_time).count()/1000000.0<<endl;
-    
-    if( reader_type == 'r'){
-        cout << "Starting Random Read" << endl;
-        high_resolution_clock::time_point random_read_start_time = high_resolution_clock::now();
-        randomRead(db,scan_size);
-        high_resolution_clock::time_point random_read_end_time = high_resolution_clock::now();
-        cout << "Random Read Completed" << endl;
-        cout << "Random Read Scan Size : " << scan_size << endl;
-        cout << "Random Read time taken : " << duration_cast<microseconds>(random_read_end_time - random_read_start_time).count() / 1000000.0 << endl;
-    }
 
-    else{
-        cout<<"Starting Sequential Read"<<endl;
-        char *result = new char[recordsize];
-        high_resolution_clock::time_point sequential_read_start_time = high_resolution_clock::now();
-        uint64_t RID = randomRIDgenerator();
-        db.SeqRead(RID, result,scan_size);
-        high_resolution_clock::time_point sequential_read_end_time = high_resolution_clock::now();
-        cout<<"Sequential Read Completed"<<endl;
-        cout<<"Sequential Read Scan Size : "<<scan_size<<endl;
-        cout<<"Sequential Read time taken : "<<duration_cast<microseconds>(sequential_read_end_time - sequential_read_start_time).count()/1000000.0<<endl;        
-    }
+    db.ReadTable();    
+
+    // if( reader_type == 'r'){
+    //     cout << "Starting Random Read" << endl;
+    //     high_resolution_clock::time_point random_read_start_time = high_resolution_clock::now();
+    //     randomRead(db,scan_size);
+    //     high_resolution_clock::time_point random_read_end_time = high_resolution_clock::now();
+    //     cout << "Random Read Completed" << endl;
+    //     cout << "Random Read Scan Size : " << scan_size << endl;
+    //     cout << "Random Read time taken : " << duration_cast<microseconds>(random_read_end_time - random_read_start_time).count() / 1000000.0 << endl;
+    // }
+
+    // else{
+    //     cout<<"Starting Sequential Read"<<endl;
+    //     char *result = new char[recordsize];
+    //     high_resolution_clock::time_point sequential_read_start_time = high_resolution_clock::now();
+    //     uint64_t RID = randomRIDgenerator();
+    //     db.SeqRead(RID, result,scan_size);
+    //     high_resolution_clock::time_point sequential_read_end_time = high_resolution_clock::now();
+    //     cout<<"Sequential Read Completed"<<endl;
+    //     cout<<"Sequential Read Scan Size : "<<scan_size<<endl;
+    //     cout<<"Sequential Read time taken : "<<duration_cast<microseconds>(sequential_read_end_time - sequential_read_start_time).count()/1000000.0<<endl;        
+    // }
 
 
     db.CloseTable();

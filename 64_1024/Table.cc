@@ -184,58 +184,60 @@ void Table::CloseTable(){
 }
 
 bool Table::SingleRead(uint64_t RID,char* buff){
-    
+    DirPage* dir_page = new DirPage();
+    DataPage* data_page = new DataPage();
+    //cout<<"Rand Read "<<RID<<endl;
     uint32_t slotID = (RID & 0xffffffff);
     uint32_t pageID = (RID >> 32); 
-    fseek(table,0,SEEK_SET);
     //cout<<"PageID : "<<pageID<<" Slot ID: "<<slotID<<endl;
     uint32_t current_dir_offset=0;
     while(true){
-        DirPage* current_dir_page = new DirPage();
-        ReadPage(current_dir_page,current_dir_offset);
-        for(int i = 0; i < current_dir_page->header.offset_count;i++){
-            uint32_t current_data_offset = current_dir_page->data_offsets[i];
-            DataPage* current_data_page = new DataPage();
-            ReadPage(current_data_page,current_data_offset);
-            if(current_data_page->header.pageID == pageID){
-                if(current_data_page->Read(RID,buff)){
-                    cout<<"Page ID Now : "<<current_data_page->header.pageID<<endl;
+        ReadPage(dir_page,current_dir_offset);
+        for(int i = 0; i < dir_page->header.offset_count;i++){
+            uint32_t current_data_offset = dir_page->data_offsets[i];
+            ReadPage(data_page,current_data_offset);
+            if(data_page->header.pageID == pageID){
+                if(data_page->Read(RID,buff)){
+                    //cout<<"Page ID Now : "<<data_page->header.pageID<<endl;
+                    delete dir_page;
+                    delete data_page;
                     return true;
                 }
+                delete dir_page;
+                delete data_page;
                 return false;
             }
-            
         }
-        current_dir_offset = current_dir_page->header.next;
+        current_dir_offset = dir_page->header.next;
         if(current_dir_offset == -1){
-
-            cout<<current_dir_page->header.pageID<<" End of Reading DB"<<endl;
+            cout<<dir_page->header.pageID<<" End of Reading DB"<<endl;
             break;
         }
     }
+    delete dir_page;
+    delete data_page;
+    return true;
 }
 bool Table::SeqRead(uint64_t RID,char* buff,uint32_t scan_size){
-    
+    DirPage* dir_page = new DirPage();
+    DataPage* data_page = new DataPage();
     uint32_t slotID = (RID & 0xffffffff);
     uint32_t pageID = (RID >> 32); 
-    fseek(table,0,SEEK_SET);
-    cout<<"PageID : "<<pageID<<" Slot ID: "<<slotID<<endl;
+    //cout<<"PageID : "<<pageID<<" Slot ID: "<<slotID<<endl;
     uint32_t current_dir_offset=0;
     while(true){
-        DirPage* current_dir_page = new DirPage();
-        ReadPage(current_dir_page,current_dir_offset);
-        for(int i = 0; i < current_dir_page->header.offset_count;i++){
-            uint32_t current_data_offset = current_dir_page->data_offsets[i];
-            DataPage* current_data_page = new DataPage();
-            ReadPage(current_data_page,current_data_offset);
-            if(current_data_page->header.pageID == pageID){
+        ReadPage(dir_page,current_dir_offset);
+        for(int i = 0; i < dir_page->header.offset_count;i++){
+            uint32_t current_data_offset = dir_page->data_offsets[i];
+            ReadPage(data_page,current_data_offset);
+            if(data_page->header.pageID == pageID){
                 
                 for(int i = 0; i < scan_size;i++){
-                    if(!current_data_page->Read(slotID , buff)){
-                        if(current_data_page->header.next == -1) return true;
-                        ReadPage(current_data_page,current_data_page->header.next);
+                    if(!data_page->Read(slotID , buff)){
+                        if(data_page->header.next == -1) return true;
+                        ReadPage(data_page,data_page->header.next);
                         slotID=0;
-                        current_data_page->Read(slotID , buff);
+                        data_page->Read(slotID , buff);
                         for (int i = 0; i < recordsize; i++)
                         {
                             cout << buff[i];
@@ -250,15 +252,20 @@ bool Table::SeqRead(uint64_t RID,char* buff,uint32_t scan_size){
                     }
                     slotID++;
                 }
+                delete dir_page;
+                delete data_page;                
                 return true;            
             }
         }
-        current_dir_offset = current_dir_page->header.next;
+        current_dir_offset = dir_page->header.next;
         if(current_dir_offset == -1){
 
-            cout<<current_dir_page->header.pageID<<" End of Reading DB"<<endl;
+            cout<<dir_page->header.pageID<<" End of Reading DB"<<endl;
             break;
         }
     }
+    delete dir_page;
+    delete data_page;
+    return true;
 }
 

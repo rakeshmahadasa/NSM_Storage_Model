@@ -56,12 +56,13 @@ bool Insert(Table db,uint32_t record_count){
     }
     db.InsertPage(db.current_dir_page, db.table, db.latest_dir_offset);
     db.InsertPage(db.current_data_page,db.table,db.latest_data_offset);
+    fflush(db.table);
     return true;
 }
 
 int main(int argc, char const *argv[])
 {
-    if(argc < 6){
+    if(argc < 5){
         cerr<<"Insufficient Number of Arguments"<<endl;
         cerr<<"correct command : ./a.out <pagesize | 1024 , 4096 , 16384 > <recordsize | 8 , 64 , 256> <type of read | r or s> <read length | 10 , 100 , 1000"<<endl;
         cerr<<"Example Command : ./a.out 1024 64 r 10"<<endl;
@@ -85,6 +86,7 @@ int main(int argc, char const *argv[])
     high_resolution_clock::time_point insert_end_time = high_resolution_clock::now();
     cout<<"Insert time taken : "<<duration_cast<microseconds>(insert_end_time - insert_start_time).count()/1000000.0<<endl;
     
+
     if( reader_type == 'r'){
         cout << "Starting Random Read" << endl;
         high_resolution_clock::time_point random_read_start_time = high_resolution_clock::now();

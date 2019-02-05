@@ -56,6 +56,7 @@ bool Insert(Table db,uint32_t record_count){
     }
     db.InsertPage(db.current_dir_page, db.table, db.latest_dir_offset);
     db.InsertPage(db.current_data_page,db.table,db.latest_data_offset);
+    fflush(db.table);
     return true;
 }
 
@@ -85,6 +86,7 @@ int main(int argc, char const *argv[])
     high_resolution_clock::time_point insert_end_time = high_resolution_clock::now();
     cout<<"Insert time taken : "<<duration_cast<microseconds>(insert_end_time - insert_start_time).count()/1000000.0<<endl;
     
+
     if( reader_type == 'r'){
         cout << "Starting Random Read" << endl;
         high_resolution_clock::time_point random_read_start_time = high_resolution_clock::now();

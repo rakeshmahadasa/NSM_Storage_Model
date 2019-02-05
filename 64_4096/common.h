@@ -11,7 +11,7 @@
 using namespace std;
 
 
-const uint32_t pagesize=16384;
+const uint32_t pagesize=4096;
 const uint32_t recordsize=64;
 extern uint32_t datapagecount;
 extern uint32_t dirpagecount;
