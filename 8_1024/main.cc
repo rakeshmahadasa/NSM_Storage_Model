@@ -109,7 +109,21 @@ int main(int argc, char const *argv[])
         cout<<"Sequential Read time taken : "<<duration_cast<microseconds>(sequential_read_end_time - sequential_read_start_time).count()/1000000.0<<endl;        
     }
 
-
+    cout<<"Random Delete Started. 100 records will be deleted randomly"<<endl;
+    high_resolution_clock::time_point random_delete_start_time = high_resolution_clock::now();
+    for(int i = 0; i < 100;i++){
+        uint64_t RID = randomRIDgenerator();
+        if(db.Delete(RID)){
+            cout<<RID<<" deleted successfully"<<endl;
+        }
+        else{
+            cout<<RID<<" deletion failed"<<endl;
+            cout<<RID<<" is deleted already or doesnt exist. Check previously generated RID's"<<endl;
+        }
+    }
+    high_resolution_clock::time_point random_delete_end_time = high_resolution_clock::now();
+    cout<<"Random Delete Completed"<<endl;
+    cout<<"Random Delete time taken : "<<duration_cast<microseconds>(random_delete_end_time - random_delete_start_time).count()/1000000.0<<endl;        
     db.CloseTable();
     return 0;    
 }

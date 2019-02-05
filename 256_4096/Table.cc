@@ -12,7 +12,7 @@
 
 using namespace std;
 
-int get_eof_offset(){
+long long int get_eof_offset(){
     return (dirpagecount*sizeof(DirPage) + datapagecount*sizeof(DataPage));
 }
 
@@ -37,25 +37,25 @@ bool Table::CreateTable(const char* filename){
     return true;
 }
 
-bool Table::InsertPage(DataPage* P,FILE* table,int32_t offset){
+bool Table::InsertPage(DataPage* P,FILE* table,int64_t offset){
     fseek(table, offset, SEEK_SET);
     fwrite(P,sizeof(DataPage),1,table);
     return true;
 }
 
-bool Table::InsertPage(DirPage* P,FILE* table,int32_t offset){
+bool Table::InsertPage(DirPage* P,FILE* table,int64_t offset){
     fseek(table, offset, SEEK_SET);
     fwrite(P,sizeof(DirPage),1,table);
     return true;
 }
 
 
-void Table::ReadPage(DataPage* page_buffer,int32_t offset){
+void Table::ReadPage(DataPage* page_buffer,int64_t offset){
     fseek(table,offset,SEEK_SET);
     fread(page_buffer,sizeof(DataPage),1,table);
 }
 
-void Table::ReadPage(DirPage* page_buffer,int32_t offset){
+void Table::ReadPage(DirPage* page_buffer,int64_t offset){
     fseek(table,offset,SEEK_SET);
     fread(page_buffer,sizeof(DirPage),1,table);
 }
@@ -158,7 +158,7 @@ bool Table::LazyInsert(string record){
 
 void Table::ReadTable(){
     fseek(table,0,SEEK_SET);
-    int current_dir_offset=0;
+    long long int current_dir_offset=0;
     while(true){
         DirPage* current_dir_page = new DirPage();
         ReadPage(current_dir_page,current_dir_offset);
@@ -166,7 +166,7 @@ void Table::ReadTable(){
         current_dir_page->print_page_info();
         cout<<"======================================"<<endl;
         for(int i = 0; i < current_dir_page->header.offset_count;i++){
-            int current_data_offset = current_dir_page->data_offsets[i];
+            long long int current_data_offset = current_dir_page->data_offsets[i];
             DataPage* current_data_page = new DataPage();
             ReadPage(current_data_page,current_data_offset);
             current_data_page->print_page_info();
@@ -186,19 +186,19 @@ void Table::CloseTable(){
 bool Table::SingleRead(uint64_t RID,char* buff){
     DirPage* dir_page = new DirPage();
     DataPage* data_page = new DataPage();
-    cout<<"Rand Read "<<RID<<endl;
+    //cout<<"Rand Read "<<RID<<endl;
     uint32_t slotID = (RID & 0xffffffff);
     uint32_t pageID = (RID >> 32); 
-    cout<<"PageID : "<<pageID<<" Slot ID: "<<slotID<<endl;
-    uint32_t current_dir_offset=0;
+    //cout<<"PageID : "<<pageID<<" Slot ID: "<<slotID<<endl;
+    uint64_t current_dir_offset=0;
     while(true){
         ReadPage(dir_page,current_dir_offset);
         for(int i = 0; i < dir_page->header.offset_count;i++){
-            uint32_t current_data_offset = dir_page->data_offsets[i];
+            uint64_t current_data_offset = dir_page->data_offsets[i];
             ReadPage(data_page,current_data_offset);
             if(data_page->header.pageID == pageID){
                 if(data_page->Read(RID,buff)){
-                    cout<<"Page ID Now : "<<data_page->header.pageID<<endl;
+                    //cout<<"Page ID Now : "<<data_page->header.pageID<<endl;
                     delete dir_page;
                     delete data_page;
                     return true;
@@ -210,6 +210,7 @@ bool Table::SingleRead(uint64_t RID,char* buff){
         }
         current_dir_offset = dir_page->header.next;
         if(current_dir_offset == -1){
+            //cout<<"Final Offset : "<<dir_page->data_offsets[dir_page->header.offset_count-1]<<endl;
             cout<<dir_page->header.pageID<<" End of Reading DB"<<endl;
             break;
         }
@@ -223,12 +224,12 @@ bool Table::SeqRead(uint64_t RID,char* buff,uint32_t scan_size){
     DataPage* data_page = new DataPage();
     uint32_t slotID = (RID & 0xffffffff);
     uint32_t pageID = (RID >> 32); 
-    cout<<"PageID : "<<pageID<<" Slot ID: "<<slotID<<endl;
-    uint32_t current_dir_offset=0;
+    //cout<<"PageID : "<<pageID<<" Slot ID: "<<slotID<<endl;
+    uint64_t current_dir_offset=0;
     while(true){
         ReadPage(dir_page,current_dir_offset);
         for(int i = 0; i < dir_page->header.offset_count;i++){
-            uint32_t current_data_offset = dir_page->data_offsets[i];
+            uint64_t current_data_offset = dir_page->data_offsets[i];
             ReadPage(data_page,current_data_offset);
             if(data_page->header.pageID == pageID){
                 
@@ -269,3 +270,40 @@ bool Table::SeqRead(uint64_t RID,char* buff,uint32_t scan_size){
     return true;
 }
 
+bool Table::Delete(uint64_t RID){
+    DirPage* dir_page = new DirPage();
+    DataPage* data_page = new DataPage();
+    //cout<<"Rand Read "<<RID<<endl;
+    uint32_t slotID = (RID & 0xffffffff);
+    uint32_t pageID = (RID >> 32); 
+    //cout<<"PageID : "<<pageID<<" Slot ID: "<<slotID<<endl;
+    uint64_t current_dir_offset=0;
+    while(true){
+        ReadPage(dir_page,current_dir_offset);
+        for(int i = 0; i < dir_page->header.offset_count;i++){
+            uint64_t current_data_offset = dir_page->data_offsets[i];
+            ReadPage(data_page,current_data_offset);
+            if(data_page->header.pageID == pageID){
+                if(data_page->Delete(RID)){
+                    //cout<<"Page ID Now : "<<data_page->header.pageID<<endl;
+                    InsertPage(data_page,table,current_data_offset);
+                    delete dir_page;
+                    delete data_page;
+                    return true;
+                }
+                delete dir_page;
+                delete data_page;
+                return false;
+            }
+        }
+        current_dir_offset = dir_page->header.next;
+        if(current_dir_offset == -1){
+            //cout<<"Final Offset : "<<dir_page->data_offsets[dir_page->header.offset_count-1]<<endl;
+            cout<<dir_page->header.pageID<<" End of Reading DB"<<endl;
+            break;
+        }
+    }
+    delete dir_page;
+    delete data_page;
+    return true;
+}

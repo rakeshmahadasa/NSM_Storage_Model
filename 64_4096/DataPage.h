@@ -9,4 +9,5 @@ class DataPage{
         bool read_page_data();
         void print_page_info();
         bool Read(uint64_t RID,char* buff);
+        bool Delete(uint64_t RID);
 };

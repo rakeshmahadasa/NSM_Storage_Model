@@ -18,20 +18,21 @@ extern uint32_t dirpagecount;
 struct record{
 	uint64_t RID; 
 	char record_data[recordsize];
+  bool deleted;
 };
 
 struct DataPageHeader {
   uint32_t page_size;     // Total size of the page, including header
   uint32_t record_size;   // Size of each record
   uint32_t record_count;  // Number of records stored in the page
-  int32_t next;          // The offset of next page in the same file (described later)
+  int64_t next;          // The offset of next page in the same file (described later)
   uint32_t pageID;        // ID of the page. Used to build ID of the record
 };
 
 struct DirPageHeader {
   uint32_t page_size;     // Total size of the page, including header
   uint32_t offset_count;   // Number of Offsets to datapages stored
-  int32_t next;          // The offset of next page in the same file (described later)
+  int64_t next;          // The offset of next page in the same file (described later)
   uint32_t pageID;        // ID of the page. Used to build ID of the record
 };
 

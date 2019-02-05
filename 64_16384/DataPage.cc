@@ -28,6 +28,7 @@ bool DataPage::Insert(string input_record){
         records[header.record_count].record_data[i] = input_record[i];
     }
     records[header.record_count].RID = (uint64_t)header.pageID<<32 | header.record_count;
+    records[header.record_count].deleted=false;
     header.record_count++;
     return true;
 }
@@ -48,7 +49,15 @@ void DataPage::print_page_info(){
 bool DataPage::Read(uint64_t RID,char* buff){
     uint32_t slotID = (RID & 0xffffffff);
     if(slotID >= header.record_count) return false;
+    if(records[slotID].deleted) return false;
     strcpy(buff,records[slotID].record_data);
     return true;
 }
 
+bool DataPage::Delete(uint64_t RID){
+    uint32_t slotID = (RID & 0xffffffff);
+    if(slotID >= header.record_count) return false;
+    if(records[slotID].deleted) return true;
+    records[slotID].deleted=true;
+    return true;
+}
